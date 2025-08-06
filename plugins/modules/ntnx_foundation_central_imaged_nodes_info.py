@@ -156,6 +156,7 @@ def get_module_spec():
                         "STATE_UNAVAILABLE",
                         "STATE_DISCOVERING",
                         "STATE_IMAGING",
+                        "STATE_ONBOARDED",
                     ],
                     default=None,
                 ),

@@ -510,7 +510,7 @@ def get_module_spec():
 
     manual_node_spec_dict = dict(
         cvm_gateway=dict(type="str", required=True),
-        ipmi_netmask=dict(type="str", required=True),
+        ipmi_netmask=dict(type="str", required=False),
         rdma_passthrough=dict(type="bool", default=False),
         imaged_node_uuid=dict(type="str", required=True),
         cvm_vlan_id=dict(type="int", default=None),
@@ -521,14 +521,14 @@ def get_module_spec():
         hypervisor_hostname=dict(type="str", required=True),
         hypervisor_netmask=dict(type="str", required=True),
         cvm_netmask=dict(type="str", required=True),
-        ipmi_ip=dict(type="str", required=True),
+        ipmi_ip=dict(type="str", required=False),
         hypervisor_gateway=dict(type="str", required=True),
         hardware_attributes_override=dict(type="dict", default=None),
         cvm_ram_gb=dict(type="int", default=None),
         cvm_ip=dict(type="str", required=True),
         hypervisor_ip=dict(type="str", required=True),
         use_existing_network_settings=dict(type="bool", default=False),
-        ipmi_gateway=dict(type="str", required=True),
+        ipmi_gateway=dict(type="str", required=False),
     )
 
     discovery_override = dict(
@@ -581,6 +581,8 @@ def get_module_spec():
         ),
         skip_cluster_creation=dict(type="bool", default=False),
         imaged_cluster_uuid=dict(type="str"),
+        extra=dict(type="dict", default={}, required=False),
+        node_extra=dict(type="dict", default={}, required=False),
     )
 
     return module_args
@@ -599,6 +601,13 @@ def imageNodes(module, result):
 
     check_node_available(module, spec["nodes_list"], result)
 
+    spec.update(module.params["extra"])
+
+    for i, _ in enumerate(spec["nodes_list"]):
+        spec["nodes_list"][i].update(module.params["node_extra"])
+
+    module.log(msg=f"imageNodes: API call: {spec}")
+
     resp = imaging.create(spec)
     result["imaged_cluster_uuid"] = resp["imaged_cluster_uuid"]
 
@@ -610,7 +619,7 @@ def check_node_available(module, nodes, result):
     for node in nodes:
         node_detail = av.read(node["imaged_node_uuid"])
         node_state = node_detail["node_state"]
-        if node_state != "STATE_AVAILABLE":
+        if node_state != "STATE_AVAILABLE" and node_state != "STATE_ONBOARDED":
             avial, err = wait_till_node_available(
                 module, node["imaged_node_uuid"], node_state
             )
@@ -626,10 +635,10 @@ def wait_till_node_available(module, node_uuid, node_state):
     timeout = time.time() + 1800
     delay = 60
     img = ImagedNode(module)
-    while node_state != "STATE_AVAILABLE":
+    while node_state != "STATE_AVAILABLE" and node_state != "STATE_ONBOARDED":
         node_detail = img.read(node_uuid)
         new_node_state = node_detail["node_state"]
-        if new_node_state != "STATE_AVAILABLE":
+        if new_node_state != "STATE_AVAILABLE" and node_state != "STATE_ONBOARDED":
             if time.time() > timeout:
                 return (None, "Timeout. Node is in {0}\n".format(new_node_state))
             time.sleep(delay)
